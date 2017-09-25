@@ -1,6 +1,6 @@
 #include <PWM.h>
 
-int32_t PWMFrequency = 20; //frequency (in Hz)
+int32_t PWMFrequency = 20; //PWM frequency (in Hz)
 int StrainGuage;
 int CurrentForce;
 int Error = 0;
@@ -8,15 +8,14 @@ int Error_derevative = 0;
 int Error_integral = 0;
 int DesiredForce;
 int ControlFoce;
-int Kp = 1;
-int Kd = 0;
-int Ki = 0;
+int Kp = 1; // propotional gain
+int Kd = 0; // derivative gain
+int Ki = 0; // integral gain
 
 char buf[20];
 
 void setup() {
   InitTimersSafe(); //Timer1(PIN9,10), Timer2(PIN11,3) Initialize
-  
   bool success = SetPinFrequencySafe(9, PWMFrequency);
   //bool success = SetPinFrequencySafe(11, PWMFrequency);
   if(success) {
