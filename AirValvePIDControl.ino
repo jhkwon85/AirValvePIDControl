@@ -16,6 +16,10 @@ enum CONTROLMODE {NO_CONTROL, P_CONTROL, PD_CONTROL, PID_CONTROL,};
 CONTROLMODE controlMode = P_CONTROL; // CONTROL MODE SETTING
 
 char buf[20];
+int command =0;
+
+char buffer[20];               //serial read buffer
+char bufferIndex = 0; 
 
 void setup() {
   InitTimersSafe(); //Timer1(PIN9,10), Timer2(PIN11,3) Initialize
@@ -25,13 +29,40 @@ void setup() {
     pinMode(9, OUTPUT);
     digitalWrite(9, HIGH);    
   }
+  Serial.begin(9600);
+  pwmWrite(9, 0); 
+  pwmWrite(10, 255);
+  delay(1000);
 }
 
 void loop() {
-  pwmWrite(9, 0); 
-  delay(5000);
-  pwmWrite(9, 0); 
-  delay(5000);
+  
+  while(Serial.available()) 
+  {
+    buffer[bufferIndex]  = Serial.read();   
+    bufferIndex++;
+    command = atoi(buffer); //목표값
+  }
+  delay(100);
+  Serial.println(command);
+
+  for(int a=0;a<21;a++) buffer[a] = NULL; //buffer init.
+  bufferIndex = 0;
+
+  if(command>255) command =255;
+  if(command<-255) command = -255;
+    
+    if(command < 0) {
+      pwmWrite(10, -command);
+      pwmWrite(9, 0);
+    }
+    else 
+    {
+      pwmWrite(10, 0);
+      pwmWrite(9, command);
+    }
+
+
   /*
   analogeRead(A0);
   StrainGuage = analogeRead(A0);
