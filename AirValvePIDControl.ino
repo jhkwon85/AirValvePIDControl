@@ -36,31 +36,34 @@ void setup() {
 }
 
 void loop() {
-  
   while(Serial.available()) 
   {
-    buffer[bufferIndex]  = Serial.read();   
+    buffer[bufferIndex]  = Serial.read(); // Serial Read
     bufferIndex++;
     command = atoi(buffer); //목표값
   }
   delay(100);
   Serial.println(command);
-
-  for(int a=0;a<21;a++) buffer[a] = NULL; //buffer init.
+  for(int a=0;a<21;a++) 
+  {
+    buffer[a] = NULL;
+  }
   bufferIndex = 0;
-
+  
+  // command limit
   if(command>255) command =255;
   if(command<-255) command = -255;
-    
-    if(command < 0) {
-      pwmWrite(10, -command);
-      pwmWrite(9, 0);
-    }
-    else 
-    {
-      pwmWrite(10, 0);
-      pwmWrite(9, command);
-    }
+  
+  if(command < 0) 
+  {
+    pwmWrite(10, -command); // air vent 
+    pwmWrite(9, 0);
+  }
+  else 
+  {
+    pwmWrite(10, 0);
+    pwmWrite(9, command); // air input
+  }
 
 
   /*
@@ -97,7 +100,6 @@ void loop() {
 
 int ReadSensingValue()
 {
-  
 }
 
 void PIDController(CONTROLMODE controlMode)
