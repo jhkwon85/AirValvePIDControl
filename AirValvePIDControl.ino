@@ -1,153 +1,113 @@
 #include <PWM.h>
-
-int32_t PWMFrequency = 20; //PWM frequency (in Hz)
-int StrainGuage;
-int CurrentForce;
-int CurrentForce_before;
-int Error = 0;
-int Error_derevative = 0;
-int Error_integral = 0;
-int DesiredForce =500;
-int ControlForce;
-int Kp = 1; // propotional gain
-int  Kd = 0; // derivative gain
-int  Ki = 0; // integral gain
 enum CONTROLMODE {NO_CONTROL, P_CONTROL, PD_CONTROL, PID_CONTROL,};
+
+/////  USER INPUT ///////
+int32_t PWMFrequency = 20; //PWM frequency [Hz]
+int duty = 50; //Duty Cytle Input from User (0~100%)
+float desiredForce = 30; //Newton [N]
+float coefX1 = 0.4723;  // Strainguage coefficient, Can be changed(if necessary)
+float coefX0 = -296.16; // Strainguage coefficient, Can be changed(if necessary)
 CONTROLMODE controlMode = P_CONTROL; // CONTROL MODE SETTING
+float Kp = 1; // propotional gain
+float Kd = 0.01; // derivative gain
+float Ki = 0.01; // integral gain
+/////////////////////////
 
-char buf[20];
-int command =0;
+int strainGuage;
+float currentForce; //Calibrated Current force
+float error = 0;
+float previousError = 0;
+float errorDerevative = 0;
+float errorIntegral = 0;
+float command; // PID control command
 
-char buffer[20];               //serial read buffer
-char bufferIndex = 0; 
+const long interval = 50; // controller cycle [ms]
+unsigned long currentMillis = 0;
+unsigned long previousMillis = 0;
+
+char buf[20]; // serial print buf
 
 void setup() {
+  //PWM Init.
   InitTimersSafe(); //Timer1(PIN9,10), Timer2(PIN11,3) Initialize
-  bool success = SetPinFrequencySafe(9, PWMFrequency);
-  //bool success = SetPinFrequencySafe(11, PWMFrequency);
-  if(success) {
-    pinMode(9, OUTPUT);
-    digitalWrite(9, HIGH);    
-  }
-  Serial.begin(9600);
-  pwmWrite(9, 0); 
-  pwmWrite(10, 255);
+  SetPinFrequencySafe(9, PWMFrequency);
+  
+  // Valve status Init.
+  pwmWrite(9, 0); // Air-In Valve(PIN9) Close(0)
+  pwmWrite(10, 255); // Air-Out Valve(PIN0) Fully Open(255) 
   delay(1000);
+  
+  // Serial Comm. Begin
+  Serial.begin(9600);
 }
 
 void loop() {
-  while(Serial.available()) 
-  {
-    buffer[bufferIndex]  = Serial.read(); // Serial Read
-    bufferIndex++;
-    command = atoi(buffer); //목표값
-  }
-  delay(100);
-  Serial.println(command);
-  for(int a=0;a<21;a++) 
-  {
-    buffer[a] = NULL;
-  }
-  bufferIndex = 0;
+  unsigned long currentMillis = millis();
   
-  // command limit
-  if(command>255) command =255;
-  if(command<-255) command = -255;
-  
-  if(command < 0) 
-  {
-    pwmWrite(10, -command); // air vent 
-    pwmWrite(9, 0);
+  if(currentMillis - previousMillis >= interval) { 
+    ReadCurrentForce();
+    PIDController(controlMode);
+    ValveControl();
+    
+    sprintf(buf, "A,%d, B,%d, C,%d, D,%d,,", strainGuage, currentForce, error, command);
+    Serial.println(buf);
   }
-  else 
-  {
-    pwmWrite(10, 0);
-    pwmWrite(9, command); // air input
-  }
-
-
-  /*
-  analogeRead(A0);
-  StrainGuage = analogeRead(A0);
-  CurrentForce = StrainGuage; 
-  Error = CurrentForce - DesiredForce; 
-  Error_derevative = (CurrentForce - CurentForce_before) 
-  ControlForce = Kp*Error + kd*Error_derevative + Ki*Error_integral; //PID Controller
-
-  //Command Limit Setting
-  if(ControlForce > 255) ControlForce=255;
-  if(ControlForce < -255) ControlForce =-255;
-
-  //Air Input Valve Control
-  if(ControlForce >= 0)
-  {
-      pwmWrite(9, ControlForce); //air input, 0~255
-  }
-  
-  //Air Vent Valve Control
-  if(ControlForce < 0)
-  {
-    pwmWrite(10, -ControlForce); //air vent, 0~255
-  }
- 
-  CurrentForce_before = CurrentForce;
-  Error_integral = Error_integral + Error;
-
-  sprintf(buf, "A,%d, B,%d, C,%d, D,%d,,", StrainGuage, CurrentForce, Error, ControlForce);
-  delay(10);
-  */
 }
 
-int ReadSensingValue()
+//Functions
+void ReadCurrentForce()
 {
+  strainGuage = analogRead(A0);
+  currentForce = (coefX1 * strainGuage) +  coefX0;
+  if(currentForce < 0) currentForce = 0;
 }
 
 void PIDController(CONTROLMODE controlMode)
 {
   switch (controlMode) 
   {
-      case NO_CONTROL: ControlForce = 0;
+      case NO_CONTROL: command = 0;
       case P_CONTROL: 
       {
-          Error = CurrentForce - DesiredForce;
-          ControlForce = Kp*Error;
+          error = currentForce - desiredForce;
+          command = Kp * error; //P
       }
       case PD_CONTROL: 
       {
-          Error = CurrentForce - DesiredForce;
-          Error_derevative = (CurrentForce - CurrentForce_before) ;
-          ControlForce = Kp*Error + Kd*Error_derevative;
+          error = currentForce - desiredForce;
+          errorDerevative = error - previousError;
+          command = (Kp * error) + (Kd * errorDerevative); //PD
+          previousError = error;
       }
       case PID_CONTROL: 
       {
-          Error = CurrentForce - DesiredForce;
-          Error_derevative = (CurrentForce - CurrentForce_before) ;
-          ControlForce = Kp*Error + Kd*Error_derevative + Ki*Error_integral;
+          error = currentForce - desiredForce;
+          errorDerevative = error - previousError;
+          errorIntegral = errorIntegral + error;
+          command = (Kp * error) + (Kd * errorDerevative) + (Ki * errorIntegral); //PID
+          previousError = error;
       }
   }
-
-  //Command Limit Setting
-  if(ControlForce > 255) ControlForce=255;
-  if(ControlForce < -255) ControlForce =-255;
-  
-   //Air Input Valve Control
-   if(ControlForce >= 0)
-   {
-     pwmWrite(9, ControlForce); //air input, 0~255
-   }
-  
-   //Air Vent Valve Control
-   if(ControlForce < 0)
-   {
-     pwmWrite(10, -ControlForce); //air vent, 0~255
-   }
-   
-   // save variables for next step
-   CurrentForce_before = CurrentForce;
-   Error_integral = Error_integral + Error;
 }
 
-void SendData()
+void ValveControl()
 {
+  //Command Limit Setting
+  if(command > 255) command = 255;
+  if(command < -255) command = -255;
+    
+  //Air Input Valve Control
+  if(command >= 0)
+  {
+    pwmWrite(9, command); //air input, 0~255
+    pwmWrite(10, 0); //air vent, 0~255
+  }
+    
+  //Air Vent Valve Control
+  if(command < 0)
+  {
+    pwmWrite(9, 0); //air input, 0~255
+    pwmWrite(10, -command); //air vent, 0~255
+  }
 }
 
