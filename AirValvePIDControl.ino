@@ -44,13 +44,14 @@ void setup() {
 void loop() {
   unsigned long currentMillis = millis();
   
-  if(currentMillis - previousMillis >= interval) { 
+  if(currentMillis - previousMillis >= interval) {    
     ReadCurrentForce();
     PIDController(controlMode);
     ValveControl();
     
     sprintf(buf, "A,%d, B,%d, C,%d, D,%d,,", strainGuage, currentForce, error, command);
     Serial.println(buf);
+    previousMillis = currentMillis;
   }
 }
 
